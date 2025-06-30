@@ -1083,6 +1083,9 @@ function! s:undotree.Render() abort
                         let newline = newline.' '.g:undotree_TreeReturnShape
                     endif
                 endfor
+            else
+                " This is the last element, don't create any output line
+                let newline = onespace
             endif
             call remove(slots,index)
         endif
@@ -1148,8 +1151,11 @@ function! s:undotree.Render() abort
         unlet node
         if newline != onespace
             let newline = substitute(newline,'\s*$','','g') "remove trailing space.
-            call insert(out,newline,0)
-            call insert(outmeta,newmeta,0)
+            " Only add non-empty lines that contain actual content
+            if newline !~ '^\s*$'
+                call insert(out,newline,0)
+                call insert(outmeta,newmeta,0)
+            endif
         endif
     endwhile
     let self.asciitree = out
