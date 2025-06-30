@@ -98,7 +98,7 @@ let s:keymap += [['Enter','<2-LeftMouse>','Move to the current state']]
 let s:keymap += [['Enter','<cr>','Move to the current state']]
 let s:keymap += [['CreateCheckpoint','N','Create named checkpoint']]
 let s:keymap += [['RemoveCheckpoint','R','Remove checkpoint']]
-let s:keymap += [['ListCheckpoints','L','List all checkpoints']]
+let s:keymap += [['ListCheckpoints','<leader>L','List all checkpoints']]
 
 " 'Diff' sign definitions. There are two 'delete' signs; a 'normal' one and one
 " that is used if the very end of the buffer has been deleted (in which case the
@@ -564,7 +564,16 @@ function! s:undotree.ActionRemoveCheckpoint() abort
 endfunction
 
 function! s:undotree.ActionListCheckpoints() abort
+    call s:log("ActionListCheckpoints called")
+    
+    if !self.SetTargetFocus()
+        echo "Could not set target focus"
+        return
+    endif
+    
+    echo "Listing checkpoints for " . expand('%:p')
     call undotree#UndotreeListCheckpoints()
+    call self.SetFocus()
 endfunction
 
 function! s:undotree.UpdateDiff() abort
@@ -1723,15 +1732,19 @@ function! undotree#UndotreeListCheckpoints() abort
     let l:checkpoints = get(l:checkpoints_data, 'checkpoints', {})
     
     if empty(l:checkpoints)
-        echo "No checkpoints found"
+        echo "No checkpoints found for " . expand('%:t')
         return
     endif
     
-    echo "Named checkpoints:"
-    for [l:seq, l:info] in items(l:checkpoints)
+    echo "Named checkpoints for " . expand('%:t') . ":"
+    let l:sorted_items = sort(items(l:checkpoints), {a, b -> str2nr(a[0]) - str2nr(b[0])})
+    for [l:seq, l:info] in l:sorted_items
         let l:time_str = strftime('%Y-%m-%d %H:%M:%S', l:info.timestamp)
-        echo "  " . l:seq . ": " . l:info.name . " (" . l:time_str . ")"
+        echo "  seq " . l:seq . ": " . l:info.name . " (" . l:time_str . ")"
     endfor
+    
+    " Wait for user to see the output
+    call input("Press Enter to continue...")
 endfunction
 
 " Remove a checkpoint by name or sequence
