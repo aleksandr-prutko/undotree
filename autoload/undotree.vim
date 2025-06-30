@@ -98,7 +98,6 @@ let s:keymap += [['Enter','<2-LeftMouse>','Move to the current state']]
 let s:keymap += [['Enter','<cr>','Move to the current state']]
 let s:keymap += [['CreateCheckpoint','N','Create named checkpoint']]
 let s:keymap += [['RemoveCheckpoint','R','Remove checkpoint']]
-let s:keymap += [['ListCheckpoints','<leader>L','List all checkpoints']]
 
 " 'Diff' sign definitions. There are two 'delete' signs; a 'normal' one and one
 " that is used if the very end of the buffer has been deleted (in which case the
@@ -563,10 +562,6 @@ function! s:undotree.ActionRemoveCheckpoint() abort
     call self.SetFocus()
 endfunction
 
-function! s:undotree.ActionListCheckpoints() abort
-    call s:log("ActionListCheckpoints called")
-    call undotree#UndotreeListCheckpoints()
-endfunction
 
 function! s:undotree.UpdateDiff() abort
     call s:log("undotree.UpdateDiff()")

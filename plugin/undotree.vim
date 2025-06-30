@@ -217,4 +217,7 @@ command! -nargs=1 -bar UndotreeCheckpoint  :call undotree#UndotreeCreateCheckpoi
 command! -nargs=0 -bar UndotreeListCheckpoints :call undotree#UndotreeListCheckpoints()
 command! -nargs=1 -bar UndotreeRemoveCheckpoint :call undotree#UndotreeRemoveCheckpoint(<args>)
 
+" Global key mappings for checkpoint management
+nnoremap <silent> <leader>L :UndotreeListCheckpoints<CR>
+
 " vim: set et fdm=marker sts=4 sw=4:
