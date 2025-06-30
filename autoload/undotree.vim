@@ -565,48 +565,7 @@ endfunction
 
 function! s:undotree.ActionListCheckpoints() abort
     call s:log("ActionListCheckpoints called")
-    
-    " Get current target buffer info first
-    let l:current_buf = self.targetBufnr
-    let l:current_file = ''
-    
-    if l:current_buf != -1
-        let l:current_file = fnamemodify(bufname(l:current_buf), ':t')
-    endif
-    
-    " Load checkpoints for the target buffer
-    let l:checkpoint_file = ''
-    if l:current_buf != -1
-        let l:undo_file = undofile(bufname(l:current_buf))
-        let l:checkpoint_file = l:undo_file . '.checkpoints'
-    endif
-    
-    let l:checkpoints = {}
-    if !empty(l:checkpoint_file) && filereadable(l:checkpoint_file)
-        try
-            let l:content = readfile(l:checkpoint_file)
-            let l:json_str = join(l:content, '')
-            let l:checkpoints_data = json_decode(l:json_str)
-            let l:checkpoints = get(l:checkpoints_data, 'checkpoints', {})
-        catch
-            " Ignore errors
-        endtry
-    endif
-    
-    " Display in command area (stays visible)
-    if empty(l:checkpoints)
-        echom "No checkpoints found for " . l:current_file
-    else
-        echom "Named checkpoints for " . l:current_file . ":"
-        let l:sorted_items = sort(items(l:checkpoints), {a, b -> str2nr(a[0]) - str2nr(b[0])})
-        for [l:seq, l:info] in l:sorted_items
-            let l:time_str = strftime('%Y-%m-%d %H:%M:%S', l:info.timestamp)
-            echom "  seq " . l:seq . ": " . l:info.name . " (" . l:time_str . ")"
-        endfor
-    endif
-    
-    " Wait for user to see the output
-    call input("Press Enter to continue...")
+    call undotree#UndotreeListCheckpoints()
 endfunction
 
 function! s:undotree.UpdateDiff() abort
@@ -1761,15 +1720,44 @@ endfunction
 function! undotree#UndotreeListCheckpoints() abort
     call s:log("undotree#UndotreeListCheckpoints()")
     
-    let l:checkpoints_data = s:LoadCheckpoints()
-    let l:checkpoints = get(l:checkpoints_data, 'checkpoints', {})
+    " If called from undotree panel, get the target buffer
+    let l:target_file = ''
+    if exists('b:isUndotreeBuffer') && exists('t:undotree')
+        let l:target_bufnr = t:undotree.targetBufnr
+        if l:target_bufnr != -1
+            let l:target_file = bufname(l:target_bufnr)
+        endif
+    else
+        let l:target_file = expand('%:p')
+    endif
     
-    if empty(l:checkpoints)
-        echo "No checkpoints found for " . expand('%:t')
+    if empty(l:target_file)
+        echo "No target file found"
         return
     endif
     
-    echo "Named checkpoints for " . expand('%:t') . ":"
+    " Load checkpoints for the correct file
+    let l:undo_file = undofile(l:target_file)
+    let l:checkpoint_file = l:undo_file . '.checkpoints'
+    let l:checkpoints = {}
+    
+    if filereadable(l:checkpoint_file)
+        try
+            let l:content = readfile(l:checkpoint_file)
+            let l:json_str = join(l:content, '')
+            let l:checkpoints_data = json_decode(l:json_str)
+            let l:checkpoints = get(l:checkpoints_data, 'checkpoints', {})
+        catch
+            call s:log("Failed to load checkpoints: " . v:exception)
+        endtry
+    endif
+    
+    if empty(l:checkpoints)
+        echo "No checkpoints found for " . fnamemodify(l:target_file, ':t')
+        return
+    endif
+    
+    echo "Named checkpoints for " . fnamemodify(l:target_file, ':t') . ":"
     let l:sorted_items = sort(items(l:checkpoints), {a, b -> str2nr(a[0]) - str2nr(b[0])})
     for [l:seq, l:info] in l:sorted_items
         let l:time_str = strftime('%Y-%m-%d %H:%M:%S', l:info.timestamp)
