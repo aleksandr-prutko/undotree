@@ -213,5 +213,8 @@ command! -nargs=0 -bar UndotreeHide        :call undotree#UndotreeHide()
 command! -nargs=0 -bar UndotreeShow        :call undotree#UndotreeShow()
 command! -nargs=0 -bar UndotreeFocus       :call undotree#UndotreeFocus()
 command! -nargs=0 -bar UndotreePersistUndo :call undotree#UndotreePersistUndo(1)
+command! -nargs=1 -bar UndotreeCheckpoint  :call undotree#UndotreeCreateCheckpoint(<args>)
+command! -nargs=0 -bar UndotreeListCheckpoints :call undotree#UndotreeListCheckpoints()
+command! -nargs=1 -bar UndotreeRemoveCheckpoint :call undotree#UndotreeRemoveCheckpoint(<args>)
 
 " vim: set et fdm=marker sts=4 sw=4:

@@ -18,6 +18,7 @@ syn match UndotreeHelpKey '^" \zs.\{-}\ze:' contained
 syn match UndotreeHelpTitle '===.*===' contained
 syn match UndotreeSavedSmall ' \zss\ze '
 syn match UndotreeSavedBig ' \zsS\ze '
+syn match UndotreeCheckpoint '\[.\{-}\]$'
 
 hi def link UndotreeNode Question
 hi def link UndotreeNodeCurrent Statement
@@ -33,5 +34,6 @@ hi def link UndotreeHelpKey Function
 hi def link UndotreeHelpTitle Type
 hi def link UndotreeSavedSmall WarningMsg
 hi def link UndotreeSavedBig MatchParen
+hi def link UndotreeCheckpoint Special
 
 " vim: set et fdm=marker sts=4 sw=4:

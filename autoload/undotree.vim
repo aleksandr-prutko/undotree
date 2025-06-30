@@ -96,6 +96,9 @@ let s:keymap += [['Redo','<c-r>','Redo']]
 let s:keymap += [['Undo','u','Undo']]
 let s:keymap += [['Enter','<2-LeftMouse>','Move to the current state']]
 let s:keymap += [['Enter','<cr>','Move to the current state']]
+let s:keymap += [['CreateCheckpoint','N','Create named checkpoint']]
+let s:keymap += [['RemoveCheckpoint','R','Remove checkpoint']]
+let s:keymap += [['ListCheckpoints','L','List all checkpoints']]
 
 " 'Diff' sign definitions. There are two 'delete' signs; a 'normal' one and one
 " that is used if the very end of the buffer has been deleted (in which case the
@@ -307,6 +310,7 @@ function! s:undotree.Init() abort
     let self.diffmark = -1 " Marker for the diff view
     let self.targetid = -1
     let self.targetBufnr = -1
+    let self.checkpoints = {} " Named checkpoints: {seq: {name, timestamp, description}}
     let self.rawtree = {}  "data passed from undotree()
     let self.tree = {}     "data converted to internal format.
     let self.seq_last = -1
@@ -505,6 +509,64 @@ function! s:undotree.ActionClose() abort
     call self.Toggle()
 endfunction
 
+function! s:undotree.ActionCreateCheckpoint() abort
+    if !self.SetTargetFocus()
+        return
+    endif
+    
+    let l:tree = undotree()
+    let l:current_seq = l:tree.seq_cur
+    
+    if l:current_seq == 0
+        echohl ErrorMsg
+        echo "Cannot create checkpoint: no undo history available"
+        echohl NONE
+        return
+    endif
+    
+    let l:name = input("Checkpoint name: ")
+    if empty(l:name)
+        return
+    endif
+    
+    call undotree#UndotreeCreateCheckpoint(l:name)
+    call self.SetFocus()
+endfunction
+
+function! s:undotree.ActionRemoveCheckpoint() abort
+    if !self.SetTargetFocus()
+        return
+    endif
+    
+    let l:checkpoints_data = s:LoadCheckpoints()
+    let l:checkpoints = get(l:checkpoints_data, 'checkpoints', {})
+    
+    if empty(l:checkpoints)
+        echo "No checkpoints found"
+        call self.SetFocus()
+        return
+    endif
+    
+    " Show available checkpoints
+    echo "Available checkpoints:"
+    for [l:seq, l:info] in items(l:checkpoints)
+        echo "  " . l:seq . ": " . l:info.name
+    endfor
+    
+    let l:identifier = input("Enter checkpoint name or sequence to remove: ")
+    if empty(l:identifier)
+        call self.SetFocus()
+        return
+    endif
+    
+    call undotree#UndotreeRemoveCheckpoint(l:identifier)
+    call self.SetFocus()
+endfunction
+
+function! s:undotree.ActionListCheckpoints() abort
+    call undotree#UndotreeListCheckpoints()
+endfunction
+
 function! s:undotree.UpdateDiff() abort
     call s:log("undotree.UpdateDiff()")
     if !t:diffpanel.IsVisible()
@@ -686,6 +748,10 @@ function! s:undotree.Update() abort
     else
         let self.rawtree = undotree()
     endif
+    
+    " Load named checkpoints
+    let l:checkpoints_data = s:LoadCheckpoints()
+    let self.checkpoints = get(l:checkpoints_data, 'checkpoints', {})
     let self.seq_last = self.rawtree.seq_last
     let self.seq_cur = -1
     let self.seq_curhead = -1
@@ -1030,8 +1096,13 @@ function! s:undotree.Render() abort
                     let newline = newline.g:undotree_TreeVertShape.' '
                 endif
             endfor
+            " Add checkpoint name if available
+            let checkpoint_name = ''
+            if has_key(self.checkpoints, string(node.seq))
+                let checkpoint_name = ' [' . self.checkpoints[string(node.seq)].name . ']'
+            endif
             let newline = newline.'   '.(node.seq).'    '.
-                        \'('.s:gettime(node.time).')'
+                        \'('.s:gettime(node.time).')' . checkpoint_name
             " update the printed slot to its child.
             if empty(node.p)
                 let slots[index] = 'x'
@@ -1554,6 +1625,150 @@ function! undotree#UndotreePersistUndo(goSetUndofile) abort
         endif
     else
         call s:log(" > Undofile has been set. Do nothing.")
+    endif
+endfunction
+
+"=================================================
+" Named checkpoints functionality
+
+" Get checkpoint file path for current buffer
+function! s:GetCheckpointFile() abort
+    let l:undo_file = undofile(expand('%'))
+    return l:undo_file . '.checkpoints'
+endfunction
+
+" Load checkpoints from file
+function! s:LoadCheckpoints() abort
+    let l:checkpoint_file = s:GetCheckpointFile()
+    if !filereadable(l:checkpoint_file)
+        return {}
+    endif
+    
+    try
+        let l:content = readfile(l:checkpoint_file)
+        let l:json_str = join(l:content, '')
+        return json_decode(l:json_str)
+    catch
+        call s:log("Failed to load checkpoints: " . v:exception)
+        return {}
+    endtry
+endfunction
+
+" Save checkpoints to file
+function! s:SaveCheckpoints(checkpoints) abort
+    let l:checkpoint_file = s:GetCheckpointFile()
+    let l:checkpoint_dir = fnamemodify(l:checkpoint_file, ':h')
+    
+    if !isdirectory(l:checkpoint_dir)
+        call mkdir(l:checkpoint_dir, 'p', 0700)
+    endif
+    
+    try
+        let l:data = {
+        \   'version': 1,
+        \   'checkpoints': a:checkpoints
+        \ }
+        let l:json_str = json_encode(l:data)
+        call writefile([l:json_str], l:checkpoint_file)
+        call s:log("Checkpoints saved to: " . l:checkpoint_file)
+    catch
+        call s:log("Failed to save checkpoints: " . v:exception)
+    endtry
+endfunction
+
+" Create a named checkpoint at current undo state
+function! undotree#UndotreeCreateCheckpoint(name) abort
+    call s:log("undotree#UndotreeCreateCheckpoint(" . a:name . ")")
+    
+    let l:tree = undotree()
+    let l:current_seq = l:tree.seq_cur
+    
+    if l:current_seq == 0
+        echohl ErrorMsg
+        echo "Cannot create checkpoint: no undo history available"
+        echohl NONE
+        return
+    endif
+    
+    let l:checkpoints_data = s:LoadCheckpoints()
+    let l:checkpoints = get(l:checkpoints_data, 'checkpoints', {})
+    
+    let l:checkpoints[string(l:current_seq)] = {
+    \   'name': a:name,
+    \   'timestamp': localtime(),
+    \   'description': ''
+    \ }
+    
+    call s:SaveCheckpoints(l:checkpoints)
+    
+    echo "Checkpoint '" . a:name . "' created for sequence " . l:current_seq
+    
+    " Refresh undotree display if open
+    if exists('t:undotree') && t:undotree.IsVisible()
+        call t:undotree.Update()
+    endif
+endfunction
+
+" List all checkpoints
+function! undotree#UndotreeListCheckpoints() abort
+    call s:log("undotree#UndotreeListCheckpoints()")
+    
+    let l:checkpoints_data = s:LoadCheckpoints()
+    let l:checkpoints = get(l:checkpoints_data, 'checkpoints', {})
+    
+    if empty(l:checkpoints)
+        echo "No checkpoints found"
+        return
+    endif
+    
+    echo "Named checkpoints:"
+    for [l:seq, l:info] in items(l:checkpoints)
+        let l:time_str = strftime('%Y-%m-%d %H:%M:%S', l:info.timestamp)
+        echo "  " . l:seq . ": " . l:info.name . " (" . l:time_str . ")"
+    endfor
+endfunction
+
+" Remove a checkpoint by name or sequence
+function! undotree#UndotreeRemoveCheckpoint(identifier) abort
+    call s:log("undotree#UndotreeRemoveCheckpoint(" . a:identifier . ")")
+    
+    let l:checkpoints_data = s:LoadCheckpoints()
+    let l:checkpoints = get(l:checkpoints_data, 'checkpoints', {})
+    
+    if empty(l:checkpoints)
+        echo "No checkpoints found"
+        return
+    endif
+    
+    let l:seq_to_remove = ''
+    
+    " Check if identifier is a sequence number
+    if has_key(l:checkpoints, a:identifier)
+        let l:seq_to_remove = a:identifier
+    else
+        " Search by name
+        for [l:seq, l:info] in items(l:checkpoints)
+            if l:info.name == a:identifier
+                let l:seq_to_remove = l:seq
+                break
+            endif
+        endfor
+    endif
+    
+    if empty(l:seq_to_remove)
+        echo "Checkpoint '" . a:identifier . "' not found"
+        return
+    endif
+    
+    let l:name = l:checkpoints[l:seq_to_remove].name
+    call remove(l:checkpoints, l:seq_to_remove)
+    call s:SaveCheckpoints(l:checkpoints)
+    
+    echo "Checkpoint '" . l:name . "' removed"
+    
+    " Refresh undotree display if open
+    if exists('t:undotree') && t:undotree.IsVisible()
+        call t:undotree.Update()
     endif
 endfunction
 
